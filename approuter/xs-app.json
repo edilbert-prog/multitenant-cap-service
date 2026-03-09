@@ -1,0 +1,15 @@
+{
+  "routes": [
+    {
+      "source": "^/odata/(.*)$",
+      "target": "/odata/$1",
+      "destination": "saas-backend",
+      "authenticationType": "xsuaa"
+    },
+    {
+      "source": "^/(.*)$",
+      "localDir": "build",
+      "authenticationType": "xsuaa"
+    }
+  ]
+}

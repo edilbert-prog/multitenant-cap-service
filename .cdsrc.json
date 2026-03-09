@@ -1,0 +1,17 @@
+{
+  "features": { "outbox": false },
+  "requires": {
+    "auth": {
+      "[production]": {
+        "kind": "xsuaa"
+      }
+    },
+    "db": {
+      "kind": "postgres",
+      "[production]": {
+        "kind": "postgres"
+      }
+    }
+  },
+  "multitenancy": { "enabled": true }
+}

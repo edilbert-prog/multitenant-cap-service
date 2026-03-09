@@ -1,0 +1,120 @@
+ID: multitenancy-cap-service
+_schema-version: "3.1"
+version: 1.0.0
+
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm install
+        - npm run build
+
+modules:
+  ####################################################
+  # CAP Backend
+  ####################################################
+  - name: cap-saas-backend
+    type: nodejs
+    path: .
+    parameters:
+      memory: 512M
+      disk-quota: 1G
+
+    properties:
+      SAP_JWT_TRUST_ACL: '[{"clientid":"*","identityzone":"*"}]'
+
+    provides:
+      - name: backend-api
+        properties:
+          url: ${default-url}
+
+    requires:
+      - name: cap-saas-db
+      - name: cap-saas-xsuaa
+      - name: cap-saas-registry
+
+  ####################################################
+  # Approuter
+  ####################################################
+  - name: cap-saas-approuter
+    type: approuter.nodejs
+    path: approuter
+
+    parameters:
+      memory: 256M
+      disk-quota: 1G
+      host: cap-saas-approuter
+
+    properties:
+      TENANT_HOST_PATTERN: "^(.*)-${default-uri}"
+
+    requires:
+      - name: backend-api
+        group: destinations
+        properties:
+          name: saas-backend
+          url: ~{url}
+          forwardAuthToken: true
+
+      - name: cap-saas-xsuaa
+      - name: cap-saas-registry
+
+####################################################
+# Resources
+####################################################
+resources:
+  ####################################################
+  # PostgreSQL
+  ####################################################
+  - name: cap-saas-db
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: postgresql-db
+      service-plan: free
+
+  ####################################################
+  # XSUAA
+  ####################################################
+  - name: cap-saas-xsuaa
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: xs-security.json
+
+  ####################################################
+  # SaaS Registry
+  ####################################################
+  - name: cap-saas-registry
+    type: org.cloudfoundry.managed-service
+    requires:
+      - name: backend-api
+
+    parameters:
+      service: saas-registry
+      service-plan: application
+
+      config:
+        xsappname: multitenancy-cap-service
+        tenant-mode: shared
+
+        appName: cap-saas-approuter
+
+        displayName: CAP SaaS Demo
+        description: CAP Multitenant SaaS Demo
+        category: SaaS
+
+        appUrls:
+          onSubscription: ~{backend-api/url}/callback/v1.0/tenants/{tenantId}
+          onUnSubscription: ~{backend-api/url}/callback/v1.0/tenants/{tenantId}
+          getDependencies: ~{backend-api/url}/callback/v1.0/dependencies
+
+        appPlans:
+          - name: FREE
+            description: Free plan
+
+          - name: STANDARD
+            description: Standard plan
+
+          - name: PREMIUM
+            description: Premium plan

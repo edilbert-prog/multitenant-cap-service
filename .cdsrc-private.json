@@ -1,0 +1,20 @@
+{
+  "requires": {
+    "[hybrid]": {
+      "db": {
+        "binding": {
+          "type": "cf",
+          "apiEndpoint": "https://api.cf.ap10.hana.ondemand.com",
+          "org": "Sirobilt-cf",
+          "space": "dev",
+          "instance": "cap-saas-db",
+          "key": "cap-saas-db-key"
+        },
+        "kind": "postgres",
+        "vcap": {
+          "name": "db"
+        }
+      }
+    }
+  }
+}

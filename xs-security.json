@@ -1,0 +1,41 @@
+{
+  "xsappname": "multitenancy-cap-service",
+  "tenant-mode": "shared",
+
+  "oauth2-configuration": {
+    "redirect-uris": [
+      "https://*.cfapps.ap10.hana.ondemand.com/**"
+    ]
+  },
+
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.User",
+      "description": "User access"
+    },
+    {
+      "name": "$XSAPPNAME.Callback",
+      "description": "SaaS callback access",
+      "grant-as-authority-to-apps": [
+        "sap-provisioning"
+      ]
+    }
+  ],
+
+  "role-templates": [
+    {
+      "name": "User",
+      "description": "User role",
+      "scope-references": [
+        "$XSAPPNAME.User"
+      ]
+    },
+    {
+      "name": "Callback",
+      "description": "SaaS callback role",
+      "scope-references": [
+        "$XSAPPNAME.Callback"
+      ]
+    }
+  ]
+}
