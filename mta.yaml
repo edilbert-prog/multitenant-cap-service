@@ -16,9 +16,18 @@ modules:
   - name: cap-saas-backend
     type: nodejs
     path: .
+    build-parameters:
+      ignore:
+        - node_modules/
+        - cognito_ai_web/node_modules/
+        - cognito_ai_web/
+        - python llm/
+        - dist/
+        - .git/
+        - .vscode/
     parameters:
       memory: 512M
-      disk-quota: 1G
+      disk-quota: 2G
 
     properties:
       SAP_JWT_TRUST_ACL: '[{"clientid":"*","identityzone":"*"}]'
@@ -32,6 +41,7 @@ modules:
       - name: cap-saas-db
       - name: cap-saas-xsuaa
       - name: cap-saas-registry
+      - name: cap-saas-destination
 
   ####################################################
   # Approuter
@@ -83,6 +93,25 @@ resources:
       path: xs-security.json
 
   ####################################################
+  # Destination Service
+  ####################################################
+  - name: cap-saas-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+      config:
+        init_data:
+          instance:
+            destinations:
+              - Name: ExternalAPI
+                Type: HTTP
+                URL: https://cognito-ai-llm.cfapps.ap10.hana.ondemand.com
+                ProxyType: Internet
+                Authentication: NoAuthentication
+                forwardAuthToken: true
+            existing_destinations_policy: update
+  ####################################################
   # SaaS Registry
   ####################################################
   - name: cap-saas-registry
@@ -100,8 +129,8 @@ resources:
 
         appName: cap-saas-approuter
 
-        displayName: CAP SaaS Demo
-        description: CAP Multitenant SaaS Demo
+        displayName: cognito-multitenancy-test
+        description: cognito-multitenancy-test
         category: SaaS
 
         appUrls:

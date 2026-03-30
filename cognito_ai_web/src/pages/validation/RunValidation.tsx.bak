@@ -1,0 +1,110 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Play, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useValidations, useRunValidation } from '@/api/hooks';
+
+export default function RunValidation() {
+  const navigate = useNavigate();
+  const [selectedValidationId, setSelectedValidationId] = useState<string>('');
+
+  const { data: validations, isLoading } = useValidations();
+  const runValidation = useRunValidation();
+
+  const handleRunValidation = async () => {
+    if (!selectedValidationId) return;
+
+    try {
+      const result = await runValidation.mutateAsync(parseInt(selectedValidationId));
+      // Navigate to the result details page
+      navigate(`/results/${result.result_id}`);
+    } catch (error) {
+      console.error('Failed to run validation:', error);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold">Run Validation</h1>
+      </div>
+
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Execute Validation</CardTitle>
+          <CardDescription>
+            Select a validation to run from the list below. You can also run validations directly from the Validations page.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <Alert variant="info">
+            <AlertDescription>
+              Running a validation will compare data from the configured sources and generate a new result report.
+            </AlertDescription>
+          </Alert>
+
+          <div className="space-y-2">
+            <Label htmlFor="validation-select">Select Validation</Label>
+            {isLoading ? (
+              <div className="flex items-center justify-center h-10 border rounded-md">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </div>
+            ) : (
+              <Select value={selectedValidationId} onValueChange={setSelectedValidationId}>
+                <SelectTrigger id="validation-select">
+                  <SelectValue placeholder="Choose a validation to run..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {validations?.map((validation) => (
+                    <SelectItem key={validation.validation_id} value={validation.validation_id.toString()}>
+                      {validation.validation_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <p className="text-sm text-muted-foreground">
+              {validations?.length || 0} validation(s) available
+            </p>
+          </div>
+
+          <Button
+            size="lg"
+            disabled={!selectedValidationId || runValidation.isPending}
+            onClick={handleRunValidation}
+          >
+            {runValidation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Running Validation...
+              </>
+            ) : (
+              <>
+                <Play className="mr-2 h-4 w-4" />
+                Run Validation
+              </>
+            )}
+          </Button>
+
+          {runValidation.isError && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Failed to run validation. Please try again.
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

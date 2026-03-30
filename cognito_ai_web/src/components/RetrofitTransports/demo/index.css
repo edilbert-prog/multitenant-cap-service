@@ -1,0 +1,13 @@
+.transport-wizard {
+  height: 100%;
+}
+
+.transport-wizard::part(nav) {
+  pointer-events: none;
+}
+
+.transport-wizard::part(content),
+.transport-wizard::part(step-content),
+.transport-wizard::part(main) {
+  height: 100%;
+}

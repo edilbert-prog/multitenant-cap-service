@@ -1,0 +1,6 @@
+node_modules/
+cognito_ai_web/
+python llm/
+dist/
+.mta_archives/
+*.zip

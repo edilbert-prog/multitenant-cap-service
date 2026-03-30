@@ -1,0 +1,236 @@
+import { useState } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useValidationResults, useDownloadResultCsv } from '@/api/hooks';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { FilterPill, FilterPills } from '@/components/ui/filter-pills';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Eye, Download, Loader2 } from 'lucide-react';
+
+export default function Results() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const validationId = searchParams.get('validation_id');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+
+  const { data: allResults = [], isLoading: loading, error } = useValidationResults(
+    validationId ? Number(validationId) : undefined
+  );
+  const downloadMutation = useDownloadResultCsv();
+
+  // Filter results based on status
+  const results = allResults.filter(result =>
+    statusFilter === 'all' ? true : result.execution_status === statusFilter
+  );
+
+  // Count by status
+  const statusCounts = {
+    all: allResults.length,
+    success: allResults.filter(r => r.execution_status === 'success').length,
+    failed: allResults.filter(r => r.execution_status === 'failed').length,
+    running: allResults.filter(r => r.execution_status === 'running').length,
+  };
+
+  const handleDownload = async (resultId: number, type: 'matched' | 'mismatched' | 'all') => {
+    try {
+      const blob = await downloadMutation.mutateAsync({ id: resultId, type });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `validation_result_${resultId}_${type}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`Download failed: ${err.message}`);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'success':
+        return 'success';
+      case 'failed':
+        return 'destructive';
+      case 'running':
+        return 'info';
+      default:
+        return 'default';
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {validationId ? `Results for Validation #${validationId}` : 'Validation Results'}
+        </h1>
+        <p className="text-muted-foreground mt-2">
+          View and download validation execution results
+        </p>
+      </div>
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {error instanceof Error ? error.message : 'Failed to load results'}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Filter Pills */}
+      <FilterPills>
+        <FilterPill
+          active={statusFilter === 'all'}
+          count={statusCounts.all}
+          onClick={() => setStatusFilter('all')}
+        >
+          All results
+        </FilterPill>
+        <FilterPill
+          active={statusFilter === 'success'}
+          count={statusCounts.success}
+          variant="success"
+          onClick={() => setStatusFilter('success')}
+        >
+          Success
+        </FilterPill>
+        <FilterPill
+          active={statusFilter === 'failed'}
+          count={statusCounts.failed}
+          variant="destructive"
+          onClick={() => setStatusFilter('failed')}
+        >
+          Failed
+        </FilterPill>
+        <FilterPill
+          active={statusFilter === 'running'}
+          count={statusCounts.running}
+          variant="info"
+          onClick={() => setStatusFilter('running')}
+        >
+          Running
+        </FilterPill>
+      </FilterPills>
+
+      <Card>
+        <CardHeader className="border-b border-border">
+          <CardTitle className="text-lg">Results ({results.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Result ID</TableHead>
+                <TableHead>Validation ID</TableHead>
+                <TableHead>Execution Time</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Total Left</TableHead>
+                <TableHead className="text-right">Total Right</TableHead>
+                <TableHead className="text-right">PK Matched</TableHead>
+                <TableHead className="text-right">Left Only</TableHead>
+                <TableHead className="text-right">Right Only</TableHead>
+                <TableHead className="text-right">Differences</TableHead>
+                <TableHead className="text-right">Match %</TableHead>
+                <TableHead className="text-right">Duration</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {results.length > 0 ? (
+                results.map((result) => (
+                  <TableRow key={result.result_id}>
+                    <TableCell className="font-medium">#{result.result_id}</TableCell>
+                    <TableCell className="font-medium">#{result.validation_id}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{formatDate(result.execution_timestamp)}</TableCell>
+                    <TableCell>
+                      <Badge variant={getStatusColor(result.execution_status) as any}>
+                        {result.execution_status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground">{result.total_left}</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{result.total_right}</TableCell>
+                    <TableCell className="text-right font-semibold text-[hsl(var(--color-success))]">
+                      {result.matched}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={result.left_only > 0 ? 'font-medium text-[hsl(var(--color-warning))]' : 'text-muted-foreground'}>
+                        {result.left_only}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={result.right_only > 0 ? 'font-medium text-[hsl(var(--color-warning))]' : 'text-muted-foreground'}>
+                        {result.right_only}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={result.differences > 0 ? 'font-medium text-destructive' : 'text-muted-foreground'}>
+                        {result.differences}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={`font-semibold ${result.match_percentage >= 90 ? 'text-[hsl(var(--color-success))]' : 'text-[hsl(var(--color-warning))]'}`}>
+                        {result.match_percentage.toFixed(2)}%
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right text-sm text-muted-foreground">{result.execution_time_ms}ms</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/results/${result.result_id}`)}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownload(result.result_id, 'all')}
+                        >
+                          <Download className="h-4 w-4 mr-2" />
+                          CSV
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={13} className="h-32 text-center text-muted-foreground">
+                    No results found{statusFilter !== 'all' && ` with status "${statusFilter}"`}
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

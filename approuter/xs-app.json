@@ -1,13 +1,28 @@
-{
+{"websockets": {
+    "enabled": true
+  },
   "routes": [
     {
-      "source": "^/odata/(.*)$",
-      "target": "/odata/$1",
+      "source": "^/socket.io/(.*)$",
+      "target": "/socket.io/$1",
       "destination": "saas-backend",
       "authenticationType": "xsuaa"
     },
     {
-      "source": "^/(.*)$",
+      "source": "^/cognito/api/(.*)$",
+      "target": "/$1",
+      "destination": "saas-backend",
+      "authenticationType": "xsuaa"
+    },
+    {
+      "source": "^/(.*\\..*)$",
+      "target": "/$1",
+      "localDir": "build",
+      "authenticationType": "xsuaa"
+    },
+    {
+      "source": "^(.*)$",
+      "target": "/index.html",
       "localDir": "build",
       "authenticationType": "xsuaa"
     }

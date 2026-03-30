@@ -1,0 +1,6 @@
+node_modules/
+cognito_ai_web/node_modules/
+cognito_ai_web/dist/
+.cds/
+.gen/
+.git/

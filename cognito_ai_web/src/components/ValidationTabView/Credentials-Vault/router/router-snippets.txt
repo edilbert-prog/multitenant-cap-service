@@ -1,0 +1,6 @@
+25:import CredentialsVault from "./pages/CredVaultPage";
+26:import CredCreate from "./pages/CredVaultPage/CredCreate";
+29:import CredConnectors from "./pages/CredVaultPage/CredConnectors";
+300:    '/connection-vault/connections': <CredentialsVault />,
+301:    '/connection-vault/connectors': <CredConnectors />,
+302:    '/connection-vault/create/:selectedConnectorId': <CredCreate />,

@@ -1,0 +1,495 @@
+import { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useValidationResult, useValidationResultDetails, useDownloadResultCsv } from '@/api/hooks';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { ArrowLeft, Download, CheckCircle, AlertTriangle, XCircle, Loader2 } from 'lucide-react';
+
+export default function ResultDetails() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('matched');
+
+  const resultId = id ? Number(id) : 0;
+  const { data: result, isLoading: resultLoading, error: resultError } = useValidationResult(resultId);
+  const { data: details, isLoading: detailsLoading } = useValidationResultDetails(resultId);
+  const downloadMutation = useDownloadResultCsv();
+
+  const loading = resultLoading || detailsLoading;
+  const error = resultError;
+
+  const handleDownload = async (type: 'matched' | 'mismatched' | 'all') => {
+    if (!id) return;
+    try {
+      const blob = await downloadMutation.mutateAsync({ id: Number(id), type });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `validation_result_${id}_${type}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(`Download failed: ${err.message}`);
+    }
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString();
+  };
+
+  const renderMatchedTableData = (data: any[]) => {
+    if (!data || data.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+            No records found
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    // Extract columns from both left and right records to show which side they came from
+    const firstRecord = data[0] || {};
+    const leftColumns = Object.keys(firstRecord.left_record || {});
+    const rightColumns = Object.keys(firstRecord.right_record || {});
+
+    // Determine which columns are in both sides, left only, or right only
+    const allColumns = [...new Set([...leftColumns, ...rightColumns])];
+    const commonColumns = leftColumns.filter(col => rightColumns.includes(col));
+
+    const displayData = data.slice(0, 100);
+
+    return (
+      <>
+        {displayData.map((row, idx) => (
+          <TableRow key={idx}>
+            {allColumns.map((col) => {
+              const inLeft = leftColumns.includes(col);
+              const inRight = rightColumns.includes(col);
+              const inBoth = inLeft && inRight;
+
+              // Show left value, or right value if not in left
+              const leftValue = row.left_record?.[col];
+              const rightValue = row.right_record?.[col];
+              const displayValue = leftValue ?? rightValue ?? '';
+
+              // Check if this field has a difference
+              const hasDifference = row.differences?.some((d: any) => d.field === col);
+
+              return (
+                <TableCell
+                  key={col}
+                  className={`text-sm ${
+                    hasDifference ? 'bg-red-50' :
+                    inBoth ? '' :
+                    inLeft ? 'bg-blue-50' : 'bg-green-50'
+                  }`}
+                >
+                  {inBoth && leftValue !== rightValue ? (
+                    <div className="space-y-1">
+                      <div className="text-blue-600">L: {String(leftValue ?? 'null')}</div>
+                      <div className="text-green-600">R: {String(rightValue ?? 'null')}</div>
+                    </div>
+                  ) : (
+                    String(displayValue)
+                  )}
+                </TableCell>
+              );
+            })}
+            <TableCell className="text-sm">
+              {row.differences && row.differences.length > 0 ? (
+                <Badge variant="destructive">{row.differences.length} diff(s)</Badge>
+              ) : (
+                <Badge variant="success">Perfect match</Badge>
+              )}
+            </TableCell>
+          </TableRow>
+        ))}
+        {data.length > 100 && (
+          <TableRow>
+            <TableCell colSpan={allColumns.length + 1} className="text-center py-4 text-sm text-muted-foreground">
+              Showing first 100 of {data.length} records. Download CSV for complete data.
+            </TableCell>
+          </TableRow>
+        )}
+      </>
+    );
+  };
+
+  const renderDifferencesTableData = (data: any[]) => {
+    if (!data || data.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+            No records with differences found
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    const displayData = data.slice(0, 100);
+
+    return (
+      <>
+        {displayData.map((row, idx) => {
+          const differences = row.differences || [];
+          const keyField = typeof row.key === 'object' ? JSON.stringify(row.key) : String(row.key);
+
+          return (
+            <TableRow key={idx} className="border-b">
+              <TableCell className="font-medium">{keyField}</TableCell>
+              <TableCell colSpan={2}>
+                <div className="space-y-2">
+                  {differences.map((diff: any, diffIdx: number) => (
+                    <div key={diffIdx} className="flex items-start gap-4 text-sm">
+                      <span className="font-medium min-w-[120px]">{diff.field}:</span>
+                      <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                        Left: {String(diff.left_value ?? 'null')}
+                      </span>
+                      <span className="text-red-600 bg-red-50 px-2 py-1 rounded">
+                        Right: {String(diff.right_value ?? 'null')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </TableCell>
+            </TableRow>
+          );
+        })}
+        {data.length > 100 && (
+          <TableRow>
+            <TableCell colSpan={3} className="text-center py-4 text-sm text-muted-foreground">
+              Showing first 100 of {data.length} records. Download CSV for complete data.
+            </TableCell>
+          </TableRow>
+        )}
+      </>
+    );
+  };
+
+  const renderTableData = (data: any[]) => {
+    if (!data || data.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+            No records found
+          </TableCell>
+        </TableRow>
+      );
+    }
+
+    const columns = Object.keys(data[0]);
+    const displayData = data.slice(0, 100);
+
+    return (
+      <>
+        {displayData.map((row, idx) => (
+          <TableRow key={idx}>
+            {columns.map((col) => (
+              <TableCell key={col} className="text-sm">
+                {String(row[col] ?? '')}
+              </TableCell>
+            ))}
+          </TableRow>
+        ))}
+        {data.length > 100 && (
+          <TableRow>
+            <TableCell colSpan={columns.length} className="text-center py-4 text-sm text-muted-foreground">
+              Showing first 100 of {data.length} records. Download CSV for complete data.
+            </TableCell>
+          </TableRow>
+        )}
+      </>
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>
+          {error instanceof Error ? error.message : 'Failed to load result details'}
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (!result) {
+    return (
+      <Alert variant="warning">
+        <AlertDescription>Result not found</AlertDescription>
+      </Alert>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/results')}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <h1 className="text-3xl font-bold">Validation Result #{result.result_id}</h1>
+        </div>
+        <Button variant="outline" onClick={() => handleDownload('all')}>
+          <Download className="mr-2 h-4 w-4" />
+          Download All
+        </Button>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid gap-6 md:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Primary Key Matched</p>
+              <p className="text-3xl font-bold">{result.matched}</p>
+            </div>
+            <div className="h-12 w-12 rounded-lg bg-[hsl(var(--color-success))]/10 flex items-center justify-center">
+              <CheckCircle className="h-6 w-6 text-[hsl(var(--color-success))]" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              {result.match_percentage.toFixed(2)}% match rate
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Left Only</p>
+              <p className="text-3xl font-bold">{result.left_only}</p>
+            </div>
+            <div className="h-12 w-12 rounded-lg bg-[hsl(var(--color-warning))]/10 flex items-center justify-center">
+              <AlertTriangle className="h-6 w-6 text-[hsl(var(--color-warning))]" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">Records only in source A</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Right Only</p>
+              <p className="text-3xl font-bold">{result.right_only}</p>
+            </div>
+            <div className="h-12 w-12 rounded-lg bg-[hsl(var(--color-warning))]/10 flex items-center justify-center">
+              <AlertTriangle className="h-6 w-6 text-[hsl(var(--color-warning))]" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">Records only in source B</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-muted-foreground">Differences</p>
+              <p className="text-3xl font-bold">{result.differences}</p>
+            </div>
+            <div className="h-12 w-12 rounded-lg bg-destructive/10 flex items-center justify-center">
+              <XCircle className="h-6 w-6 text-destructive" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">Matched with differences</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Execution Details */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Execution Details</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <p className="text-sm text-muted-foreground">Validation ID</p>
+              <p className="text-base font-medium">{result.validation_id}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Execution Time</p>
+              <p className="text-base font-medium">{formatDate(result.execution_timestamp)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Status</p>
+              <Badge variant={result.execution_status === 'success' ? 'success' : 'destructive'}>
+                {result.execution_status}
+              </Badge>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Duration</p>
+              <p className="text-base font-medium">{result.execution_time_ms}ms</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Data Tabs */}
+      <Card>
+        <CardContent className="pt-6">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="matched">
+                Primary Key Matched ({details?.matched_records?.length || 0})
+              </TabsTrigger>
+              <TabsTrigger value="differences">
+                Differences ({details?.matched_with_differences?.length || 0})
+              </TabsTrigger>
+              <TabsTrigger value="left">
+                Left Only ({details?.left_only_records?.length || 0})
+              </TabsTrigger>
+              <TabsTrigger value="right">
+                Right Only ({details?.right_only_records?.length || 0})
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="matched" className="mt-6">
+              {/* Legend */}
+              <div className="mb-4 p-4 bg-muted rounded-lg">
+                <div className="text-sm font-semibold mb-2">Column Legend:</div>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-purple-50 border border-purple-200 rounded"></div>
+                    <span><Badge variant="outline" className="text-xs bg-purple-50 border-purple-200 text-purple-700">Both</Badge> = Field exists on both left and right sides (compared)</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-blue-50 border border-blue-200 rounded"></div>
+                    <span><Badge variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-700">Left</Badge> = Field only in left source</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-green-50 border border-green-200 rounded"></div>
+                    <span><Badge variant="outline" className="text-xs bg-green-50 border-green-200 text-green-700">Right</Badge> = Field only in right source</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 bg-red-50 border border-red-200 rounded"></div>
+                    <span className="text-destructive font-medium">Red background = Field has differences</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {details?.matched_records?.[0] && (() => {
+                        const firstRecord = details.matched_records[0];
+                        const leftColumns = Object.keys(firstRecord.left_record || {});
+                        const rightColumns = Object.keys(firstRecord.right_record || {});
+                        const allColumns = [...new Set([...leftColumns, ...rightColumns])];
+
+                        return allColumns.map((col) => {
+                          const inLeft = leftColumns.includes(col);
+                          const inRight = rightColumns.includes(col);
+                          const inBoth = inLeft && inRight;
+
+                          return (
+                            <TableHead key={col}>
+                              <div className="flex items-center gap-2">
+                                <span>{col}</span>
+                                {inBoth ? (
+                                  <Badge variant="outline" className="text-xs bg-purple-50 border-purple-200 text-purple-700">
+                                    Both
+                                  </Badge>
+                                ) : inLeft ? (
+                                  <Badge variant="outline" className="text-xs bg-blue-50 border-blue-200 text-blue-700">
+                                    Left
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-xs bg-green-50 border-green-200 text-green-700">
+                                    Right
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableHead>
+                          );
+                        });
+                      })()}
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>{renderMatchedTableData(details?.matched_records || [])}</TableBody>
+                </Table>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="differences" className="mt-6">
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[200px]">Key</TableHead>
+                      <TableHead colSpan={2}>Differences</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {renderDifferencesTableData(details?.matched_with_differences || [])}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="left" className="mt-6">
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {details?.left_only_records?.[0] &&
+                        Object.keys(details.left_only_records[0]).map((col) => (
+                          <TableHead key={col}>{col}</TableHead>
+                        ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>{renderTableData(details?.left_only_records || [])}</TableBody>
+                </Table>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="right" className="mt-6">
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      {details?.right_only_records?.[0] &&
+                        Object.keys(details.right_only_records[0]).map((col) => (
+                          <TableHead key={col}>{col}</TableHead>
+                        ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>{renderTableData(details?.right_only_records || [])}</TableBody>
+                </Table>
+              </div>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
